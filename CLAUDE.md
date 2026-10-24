@@ -38,11 +38,12 @@ evals/              LLM eval set and harness
 docs/               brief, phase briefs, runbook, notes
 ```
 
-## Two machines
+## Where it runs
 
-Development is on the home machine. The VPS runs the stack. Nothing in the
-code may assume which machine it is on: machine specifics (hosts, ports,
-credentials, the exchange endpoint) live in `.env` and config only.
+A personal project with one delivery route: develop on the home machine,
+deploy to the VPS. There is no work machine, no work data and no bundle step.
+The code still must not assume which of the two it is on: hosts, ports,
+credentials and the exchange endpoint live in `.env` and config only.
 
 ## Never commit
 
