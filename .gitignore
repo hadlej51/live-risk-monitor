@@ -1,0 +1,30 @@
+# secrets
+.env
+*.pem
+*.key
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# node
+node_modules/
+web/dist/
+playwright-report/
+test-results/
+
+# data
+*.sqlite
+data/
+recordings/*.jsonl.gz
+
+# editors and OS
+.vscode/
+.idea/
+.DS_Store
