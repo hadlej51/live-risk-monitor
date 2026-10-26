@@ -4,9 +4,9 @@ Oct 24, 2026 · @Clay Hadley
 
 ## Goal
 
-Build and run a small real-time risk monitor the way a trading firm's risk developer would, so that every line in the DV Trading posting has a working example behind it. The system is deliberately modest. The point is the engineering around it: containers, a Linux box you administer, CI, monitoring, a React front end, a live data feed, and an LLM feature with tool calling and an eval set.
+Build and run a small real-time risk monitor the way a trading firm's risk developer would, so that every line in the DV Trading posting has a working example behind it, along with the quant lines of a Group One Trading options market-making posting (options pricing, vol surfaces, risk measures, microstructure, evaluating model behaviour). The system is deliberately modest. The point is the engineering around it: containers, a Linux box you administer, CI, monitoring, a React front end, a live data feed, and an LLM feature with tool calling and an eval set.
 
-The product at the end: a public GitHub repo with a README that walks through the architecture, a running instance on a Linux server you control, and a short write-up of what broke and what you did about it. Twelve to sixteen weeks at five to eight hours a week.
+The product at the end: a public GitHub repo with a README that walks through the architecture, a running instance on a Linux server you control, and a short write-up of what broke and what you did about it. Fourteen to eighteen weeks at five to eight hours a week.
 
 This is a home project. Nothing from Aegon, no work data, no work machine.
 
@@ -30,17 +30,21 @@ Each gap from the posting and the phase that covers it. Strengths you already ha
 | Real-time data visualization | Gap | Phase 4 |
 | Quant models, working with quants | Strong | Phase 5, and it is what makes the project credible |
 | Stakeholders | Strong | Not covered |
+| Options pricing models, implied volatility surfaces (Group One) | Gap in code, known as a user | Phase 3b |
+| Evaluating model or strategy behaviour (Group One) | Partial | Phase 3 VaR backtest, phase 3b IV residuals against the exchange |
+| Market microstructure (Group One) | Gap | Phase 3, spread, microprice and trade-flow imbalance |
+| C#, C++ (Group One) | Gap, leave out | Not covered. The posting values engineering ability over a language |
 
 ## The system
 
-A live PnL and risk monitor for a small book of crypto spot and perpetual futures positions, fed by free public exchange websockets. Crypto is the data source because it is the only free, 24/7, real-time feed with real volatility. The positions are paper, defined in a config file, no money involved.
+A live PnL and risk monitor for a small book of crypto perpetual futures, spot and listed options positions, fed by one free public exchange websocket (Deribit, which carries perps, spot pairs and options on the same connection). Crypto is the data source because it is the only free, 24/7, real-time feed with real volatility. The positions are paper, defined in a config file, no money involved.
 
 What it does, in data order:
 
-1. Subscribes to trade and book-top streams for a handful of instruments (BTC, ETH and a few others) on one exchange, with reconnect and gap detection.
+1. Subscribes to trade and book-top streams for a handful of instruments (BTC, ETH and a few others) on one exchange, plus option tickers for one underlying, with reconnect and gap detection.
 2. Maintains a position book: paper positions with entry prices, loaded from Postgres, editable from the front end.
 3. Computes on every tick: mark-to-market PnL per position and total, intraday high and low water marks, realised volatility over rolling windows, and a parametric and historical VaR refreshed every minute.
-4. Computes risk slides: PnL under a grid of price shocks per instrument, and a simple delta and gamma for the perpetuals.
+4. Computes risk slides: PnL under a grid of price shocks per instrument (and price by vol for options), delta and gamma for the perpetuals, and full greeks plus vega by expiry for the options sleeve, priced off a fitted volatility smile.
 5. Publishes the current state to Redis and pushes it over a websocket to the browser.
 6. Serves a React dashboard: live PnL tiles, a position table, a price and PnL chart, the VaR line, the slide grid, and an alerts panel.
 7. Raises alerts on rules (PnL below a floor, VaR above a limit, feed stale for more than N seconds) and delivers them to the dashboard and to a Slack or Discord webhook.
@@ -57,7 +61,7 @@ Every choice matches the posting or the most common answer in that kind of shop.
 | Component | Choice | Why |
 | --- | --- | --- |
 | Server | Ubuntu 24.04 LTS on a small VPS (Hetzner or DigitalOcean, about $6 a month) | A box you ssh into and administer. WSL2 at home is fine for development but does not count as Linux administration |
-| Feed | Coinbase Advanced Trade or Kraken public websocket | Free, no key needed for market data, well documented, 24/7 |
+| Feed | Deribit public websocket (JSON-RPC) | Free, no key needed for public channels, 24/7, and the one free venue with perps and listed options on the same connection |
 | Backend | Python 3.12, FastAPI, uvicorn, asyncio, websockets | Python is required. FastAPI is the standard answer for a Python service with websockets |
 | Cache and pub/sub | Redis | Named in the posting. Holds latest state and fans ticks out to the web layer |
 | Database | PostgreSQL 16 | Named in the posting. Positions, ticks, snapshots, alerts, eval results |
@@ -73,7 +77,7 @@ Keep the Python side stdlib-first the way you do at work, but do not avoid the l
 
 ## Phases
 
-Eight phases, each one to two weeks. Each has what you build, what you have to learn to build it, and a done-when test that is observable, not a feeling. Do them in order. Phase 1 before any code, because the habit of deploying to the box from the first commit is the skill.
+Nine phases, each one to two weeks. Each has what you build, what you have to learn to build it, and a done-when test that is observable, not a feeling. Do them in order. Phase 1 before any code, because the habit of deploying to the box from the first commit is the skill.
 
 ### Phase 0: Repo and working method (2 to 3 days)
 
@@ -101,15 +105,23 @@ Done when: the feed runs on the box for 24 hours in Docker Compose with no manua
 
 ### Phase 3: Risk engine (2 weeks)
 
-Build: a calc service that reads ticks from Redis pub/sub, maintains the book in memory, and on every tick recomputes per-position and total PnL, high and low water marks, rolling realised vol, and on a one-minute timer parametric VaR, historical VaR from the stored ticks, the price shock grid, and delta and gamma for the perps. Writes current state to Redis as one JSON document and one-minute snapshots to Postgres. A websocket endpoint on the API that pushes the state document to any connected browser.
+Build: a calc service that reads ticks from Redis pub/sub, maintains the book in memory, and on every tick recomputes per-position and total PnL, high and low water marks, rolling realised vol, and on a one-minute timer parametric VaR, historical VaR from the stored ticks, the price shock grid, and delta and gamma for the perps. Per tick, cheap microstructure measures from book-top and trades: spread, microprice, and trade-flow imbalance over a rolling window. A daily VaR backtest: count breaches against the forecast and run a Kupiec proportion-of-failures test. Writes current state to Redis as one JSON document and one-minute snapshots to Postgres. A websocket endpoint on the API that pushes the state document to any connected browser.
 
 Learn: this is where the quant work goes, but the engineering lesson is state management under a stream: what is recomputed on every tick, what on a timer, how to keep the hot path under a millisecond, how to measure that, and what happens when the feed stalls.
 
-Done when: the state document updates within 50 ms of a tick on the box, measured and logged. VaR matches a pandas calculation on the same stored ticks to four decimals. A feed stall sets a stale flag inside 5 seconds. Load test: replay a recorded hour at 10x speed without the queue growing.
+Done when: the state document updates within 50 ms of a tick on the box, measured and logged. VaR matches a pandas calculation on the same stored ticks to four decimals. A feed stall sets a stale flag inside 5 seconds. Load test: replay a recorded hour at 10x speed without the queue growing. After a week of stored ticks the VaR backtest report shows the breach count, the expected count and the Kupiec p-value.
+
+### Phase 3b: Options sleeve (1.5 to 2 weeks)
+
+Build: subscribe to Deribit option tickers for one underlying (BTC), two or three expiries, strikes within about 20 percent of the forward. Add three to six paper option positions to the book. A Black-76 pricer off the exchange forward, implied vol from mid by Newton with a bisection fallback, a smile fit per expiry (raw SVI, with a quadratic in log-moneyness as the fallback), and delta, gamma, vega and theta per position. Option PnL joins the book, vega by expiry joins the state document, and the shock grid gains a vol axis for the options. Every minute, compare your own IV and fitted smile to Deribit's mark IV and log the residuals per strike.
+
+Learn: Black-76 and why Deribit options are inverse (quoted and settled in BTC, so price and greeks need converting), root finding that does not blow up on deep wings, what makes a smile arbitrage-free (butterfly and calendar), how greeks misbehave near expiry, and where the pricing work belongs on the hot path versus the timer.
+
+Done when: your pricer reproduces Deribit's mark price from its mark IV to within 0.1 percent across the sleeve; your IV from mid is within 0.5 vol points of mark IV for the liquid strikes; tests cover the pricer against textbook values, the IV solver on wings and near expiry, and a no-butterfly-arbitrage check on the fitted smile, all with recorded messages; and phase 3's 50 ms state latency still holds with the sleeve on.
 
 ### Phase 4: React dashboard (2 to 3 weeks)
 
-Build: a Vite and TypeScript React app with a websocket hook that subscribes to the state stream. Components: PnL tiles, positions table (sortable, editable entry price and size with a PUT back to the API), a live price and PnL chart, the VaR line with its limit, the shock grid as a heat-coloured table, an alerts panel, a connection status indicator. Served by nginx from the same box.
+Build: a Vite and TypeScript React app with a websocket hook that subscribes to the state stream. Components: PnL tiles, positions table (sortable, editable entry price and size with a PUT back to the API), a live price and PnL chart, the VaR line with its limit, the shock grid as a heat-coloured table, the options greeks in the positions table and a smile chart per expiry (your fit against mark IV), an alerts panel, a connection status indicator. Served by nginx from the same box.
 
 Learn: React fundamentals (components, props, state, effects, custom hooks), TypeScript types for the API contract, how to keep a chart at 60 fps when data arrives 20 times a second (throttle, requestAnimationFrame), a build pipeline, CSS enough to lay out a dashboard. This is the biggest learning phase and the one to be patient with.
 
@@ -133,7 +145,7 @@ Done when: a commit to main reaches production with no manual step and a deliber
 
 ### Phase 7: LLM assistant and evals (2 weeks)
 
-Build: an assistant endpoint using the Anthropic API with tool use. Tools are your own API: get\_positions, get\_state, get\_snapshots(from, to), get\_alerts(from, to), get\_pnl\_attribution(from, to). The assistant answers questions like "why is PnL down since 09:30" or "which position drives VaR" by calling tools, and shows its tool calls in the dashboard. An eval set of 30 to 50 questions with known answers from recorded states, a pytest harness that runs them against the live assistant, scores them (exact for numbers, rubric for prose), and reports a pass rate. A CI job that runs the evals on a schedule and graphs the pass rate.
+Build: an assistant endpoint using the Anthropic API with tool use. Tools are your own API: get\_positions, get\_state, get\_snapshots(from, to), get\_alerts(from, to), get\_pnl\_attribution(from, to), get\_vol\_surface(expiry). The assistant answers questions like "why is PnL down since 09:30" or "which position drives VaR" by calling tools, and shows its tool calls in the dashboard. An eval set of 30 to 50 questions with known answers from recorded states, a pytest harness that runs them against the live assistant, scores them (exact for numbers, rubric for prose), and reports a pass rate. A CI job that runs the evals on a schedule and graphs the pass rate.
 
 Learn: tool schemas, the tool-use loop, system prompt design, keeping the model from inventing numbers it did not fetch, eval design, cost and latency tracking per call.
 
@@ -162,13 +174,13 @@ The project fails by growing. Each of these is tempting and each is out.
 
 - No real money, no exchange API keys with trading permission, no order placement. Paper positions only.
 - No Kubernetes, Terraform or Ansible. Compose on one box is the whole deployment. If the project is done and you want the plus, add Ansible for the box setup as a phase 9.
-- One exchange, five instruments at most. More feeds is more of the same.
-- No options pricing beyond delta and gamma on perps. The quant content is not the point and you can add it any time.
+- One exchange, five underlyings at most. Options on one underlying only, two or three expiries. More feeds is more of the same.
+- Options stop at phase 3b: Black-76, one smile model per expiry, first-order greeks plus gamma. No local or stochastic vol, no exotics, no strategy or market-making simulation, no option order book replay.
 - No authentication beyond basic auth on nginx. User management is a different project.
 - No mobile app. The dashboard is responsive, that is enough.
 - No second front end framework and no component library bake-off. Pick one chart library in phase 4 and keep it.
 - Do not rewrite the risk engine in Rust or Go. Python with measured latency is the posting's requirement.
-- Do not start phase 4 before phase 3's done-when passes. The front end on a flaky backend teaches nothing.
+- Do not start phase 4 before the done-when tests for phases 3 and 3b pass. The front end on a flaky backend teaches nothing.
 
 ## Talking about it
 
@@ -181,6 +193,7 @@ Each phase produces an answer to a question this kind of interview asks. Write t
 | What is on the hot path and how did you keep it fast | 3 | What recomputes per tick, what on a timer, the latency histogram, the 10x replay load test |
 | Tell me about your deployment pipeline | 6 | Push to main, CI, image build, ssh deploy, health check, automatic rollback, and the time a broken commit rolled back |
 | How do you know the system is healthy at 3 am | 6 | The Grafana dashboard, what you alert on and what you only graph, where the logs are |
+| How do you price options and know the model is right | 3b | Black-76 on an inverse venue, the smile fit, residuals against the exchange's mark IV, and the strike where the fit went wrong |
 | What did you build with React | 4 | A live dashboard at 20 updates a second without dropping frames, the websocket hook, the editable position table |
 | How have you integrated an LLM into an application | 7 | Tool calling against your own API, the eval set, the pass rate graph, the case the model got wrong |
 | How do you use AI coding tools and what goes wrong | 0, all | The brief and review loop, the mistakes you caught in the log, the two things you did by hand and why |
