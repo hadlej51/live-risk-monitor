@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Live Risk Monitor: a real-time PnL and risk monitor for a small paper book of crypto spot and perpetual positions, fed by a public exchange websocket. The full brief is `docs/00-brief.md`. Each phase has its own brief in `docs/NN-phase.md`; read the current one before starting work.
+Live Risk Monitor: a real-time PnL and risk monitor for a small paper book of crypto perpetual, spot and option positions, fed by a public exchange websocket. The full brief is `docs/00-brief.md`. Each phase has its own brief in `docs/NN-phase.md`; read the current one before starting work.
 
 This is a home project. Nothing from a day job: no work data, no work code, no work machine.
 
@@ -9,7 +9,7 @@ This is a home project. Nothing from a day job: no work data, no work code, no w
 | Layer | Choice |
 | --- | --- |
 | Server | Ubuntu 24.04 LTS on a small VPS, administered by hand |
-| Feed | One exchange public websocket (Coinbase Advanced Trade unless the brief says otherwise), market data only, no API key |
+| Feed | One exchange public websocket (Deribit unless the brief says otherwise: perps, spot pairs and options), market data only, no API key |
 | Backend | Python 3.12, FastAPI, uvicorn, asyncio, websockets, pydantic |
 | Cache, pub/sub | Redis 7 |
 | Database | PostgreSQL 16, migrations as plain numbered SQL files in `db/migrations/` |
@@ -28,7 +28,7 @@ Planned; create directories as the phases need them, not before.
 
 ```
 services/feed/      exchange websocket client, parser, gap detector
-services/calc/      risk engine: PnL, VaR, shocks, greeks, alerts
+services/calc/      risk engine: PnL, VaR, shocks, greeks, options pricing and smile fit, alerts
 services/api/       FastAPI: REST, state websocket, assistant
 web/                React dashboard
 db/migrations/      numbered SQL files

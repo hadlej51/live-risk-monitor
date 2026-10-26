@@ -1,6 +1,6 @@
 # Live Risk Monitor
 
-A real-time PnL and risk monitor for a small paper book of crypto spot and perpetual futures, built the way a trading firm's risk developer would build it: containers on a Linux box, CI/CD, monitoring, a React dashboard, and an LLM assistant that answers questions by calling the system's own API.
+A real-time PnL and risk monitor for a small paper book of crypto perpetual futures, spot and listed options, built the way a trading firm's risk developer would build it: containers on a Linux box, CI/CD, monitoring, a React dashboard, and an LLM assistant that answers questions by calling the system's own API.
 
 Work in progress. This README becomes the architecture document in the final phase.
 
@@ -20,7 +20,7 @@ Work in progress. This README becomes the architecture document in the final pha
   +-------------------+   state doc   +-------------------+
   |      Redis        |<------------->|   calc service    |
   +-------------------+               | PnL, VaR, shocks, |
-            |                         | greeks, alerts    |---> Slack/Discord
+            |                         | options, alerts   |---> Slack/Discord
             v                         +-------------------+
   +-------------------+
   |    API service    |  REST, state websocket, LLM assistant (tool use)
@@ -37,10 +37,11 @@ Work in progress. This README becomes the architecture document in the final pha
 
 | Phase | What | State |
 | --- | --- | --- |
-| 0 | Repo and working method | In progress |
-| 1 | Linux box | Not started |
+| 0 | Repo and working method | Done |
+| 1 | Linux box | In progress |
 | 2 | Feed and book | Not started |
 | 3 | Risk engine | Not started |
+| 3b | Options sleeve | Not started |
 | 4 | React dashboard | Not started |
 | 5 | Alerts and replay | Not started |
 | 6 | CI/CD and observability | Not started |
